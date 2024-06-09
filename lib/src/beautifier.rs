@@ -378,8 +378,8 @@ fn format_vector(state: &mut State, node: Node) -> Result<()> {
                     state.level -= 1;
                     if state.col != 0 {
                         state.println("");
-                        state.indent();
                     }
+                    state.indent();
                     state.print("]");
                 }
             }
