@@ -106,12 +106,13 @@ pub fn beautify(code: &str, arguments: &mut Arguments) -> Result<String> {
 
 fn format_document(state: &mut State, node: Node) -> Result<()> {
     let mut cursor = node.walk();
-    let children: Vec<Node> = node.named_children(&mut cursor).collect();
+    let children: Vec<Node> = node.children(&mut cursor).collect();
     for child in children {
         if format_node(state, child).is_err() {
             eprintln!("Failed to format node.");
             break;
         }
+        state.println("");
     }
     Ok(())
 }
@@ -132,33 +133,25 @@ fn format_node(state: &mut State, node: Node) -> Result<()> {
 fn format_comment(state: &mut State, node: Node) -> Result<()> {
     let text = node.utf8_text(state.code)?;
     let line = text.strip_prefix('#').unwrap_or(text).trim();
-    if state.col == 0 {
-        state.indent();
-    }
     state.print("#");
     if !line.starts_with("VRML") {
         state.print(" ");
     }
-    state.println(line);
+    state.print(line);
     Ok(())
 }
 
 fn format_extern(state: &mut State, node: Node) -> Result<()> {
     let mut cursor = node.walk();
     let children: Vec<Node> = node.named_children(&mut cursor).collect();
-    let text = children
-        .first()
-        .ok_or_else(|| anyhow!("Could not parse file."))?
-        .utf8_text(state.code)?;
+    let text = children.first().err_at_loc(&node)?.utf8_text(state.code)?;
     state.print("EXTERNPROTO ");
-    state.println(text);
+    state.print(text);
     Ok(())
 }
 
 fn format_proto(state: &mut State, node: Node) -> Result<()> {
-    let name = node
-        .child_by_field_name("proto")
-        .ok_or_else(|| anyhow!("Could not parse file."))?;
+    let name = node.child_by_field_name("proto").err_at_loc(&node)?;
     let mut cursor = node.walk();
     let fields: Vec<Node> = node
         .named_children(&mut cursor)
@@ -178,11 +171,9 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
             ("[", false) => ok = true,
             ("]", true) => ok = false,
             ("field", true) => {
-                if state.col != 0 {
-                    state.println("");
-                }
+                state.println("");
                 state.indent();
-                last_line = state.row;
+                last_line = child.range().end_point.row;
                 let mut at = state.level * state.num_spaces + sizes.0;
                 let mut ccursor = node.walk();
                 let fields: Vec<Node> = child.children(&mut ccursor).collect();
@@ -219,8 +210,6 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
             ("comment", true) => {
                 if child.range().start_point.row != last_line {
                     state.println("");
-                }
-                if state.col == 0 {
                     state.indent();
                 } else {
                     let at = state.level * state.num_spaces + sizes.0 + sizes.1 + sizes.2 + sizes.3;
@@ -232,25 +221,23 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
             (_, _) => continue,
         }
     }
+    state.println("");
     state.println("]");
     state.println("{");
     state.level = 0;
     let mut ok = false;
     for child in node.children(&mut cursor) {
         match (child.kind(), ok) {
-            ("{", false) => ok = true,
-            ("class", true) => {
-                state.indent();
-                format_class(state, child)?;
-                state.println("");
+            ("{", false) => {
+                ok = true;
+                continue;
             }
-            ("comment", true) => {
-                state.indent();
-                format_comment(state, child)?;
-            }
+            ("class", true) => format_class(state, child)?,
+            ("comment", true) => format_comment(state, child)?,
             ("javascript", true) => format_node(state, child)?,
             (_, _) => continue,
         }
+        state.println("");
     }
     state.println("}");
     Ok(())
@@ -307,10 +294,11 @@ fn field_sizes(state: &mut State, fields: Vec<Node>) -> (usize, usize, usize, us
 fn format_class(state: &mut State, node: Node) -> Result<()> {
     let identifier = node.child(0).err_at_loc(&node)?.utf8_text(state.code)?;
     state.print(identifier);
-    state.println(" {");
+    state.print(" {");
 
     let mut ok = false;
     let mut cursor = node.walk();
+    let mut last_row = 0;
 
     state.level += 1;
     for child in node.children(&mut cursor) {
@@ -318,16 +306,20 @@ fn format_class(state: &mut State, node: Node) -> Result<()> {
             ("{", false) => ok = true,
             ("}", true) => ok = false,
             ("comment", true) => {
-                if state.col == 0 {
+                if last_row != child.range().start_point.row {
+                    state.println("");
                     state.indent();
-                } else {
-                    state.print(" ");
                 }
                 format_comment(state, child)?;
             }
-            (_, true) => format_node(state, child)?,
+            (_, true) => {
+                state.println("");
+                state.indent();
+                format_node(state, child)?;
+            }
             (_, false) => continue,
         }
+        last_row = child.range().end_point.row;
     }
     state.level -= 1;
 
@@ -340,10 +332,6 @@ fn format_class(state: &mut State, node: Node) -> Result<()> {
 fn format_property(state: &mut State, node: Node) -> Result<()> {
     let mut first = true;
     let mut cursor = node.walk();
-    if state.col != 0 {
-        state.println("");
-    }
-    state.indent();
     for child in node.children(&mut cursor) {
         if !first {
             state.print(" ");
@@ -355,30 +343,33 @@ fn format_property(state: &mut State, node: Node) -> Result<()> {
 }
 
 fn format_vector(state: &mut State, node: Node) -> Result<()> {
-    let oneliner = node.range().start_point.row == node.range().end_point.row;
+    let mut oneliner = node.range().start_point.row == node.range().end_point.row;
     let mut cursor = node.walk();
-    let mut first = true;
-    let mut supress_space = false;
-    let mut last_node = "none";
+    let contains_class = node.children(&mut cursor).any(|n| n.kind() == "class");
+    if contains_class {
+        oneliner = false;
+    }
+    let mut last_node = node;
     for child in node.children(&mut cursor) {
         match child.kind() {
             "[" => {
                 if oneliner {
                     state.print("[");
                 } else {
-                    state.println("[");
+                    state.print("[");
                     state.level += 1;
+                    state.println("");
                     state.indent();
                 }
+                last_node = node;
+                continue;
             }
             "]" => {
                 if oneliner {
                     state.print("]");
                 } else {
                     state.level -= 1;
-                    if state.col != 0 {
-                        state.println("");
-                    }
+                    state.println("");
                     state.indent();
                     state.print("]");
                 }
@@ -386,25 +377,43 @@ fn format_vector(state: &mut State, node: Node) -> Result<()> {
             "," => {
                 state.print(",");
                 if !oneliner {
+                    last_node = node;
                     state.println("");
                     state.indent();
-                    first = true;
+                    continue;
                 }
             }
-            _ => {
-                if !first && !supress_space {
-                    state.print(" ");
-                }
-                if last_node == "class" {
+            "comment" => {
+                if last_node != node
+                    && (last_node.kind() == "comment"
+                        || last_node.range().end_point.row != child.range().start_point.row)
+                {
                     state.println("");
                     state.indent();
                 }
-                first = false;
-                supress_space = child.kind() == "class" || child.kind() == "comment";
-                last_node = child.kind();
+                state.print(" ");
+                format_comment(state, child)?;
+            }
+            _ => {
+                if oneliner {
+                    // First node in row
+                    if last_node != node {
+                        state.print(" ");
+                    }
+                } else {
+                    if last_node.kind() == "class" {
+                        state.println("");
+                        state.indent();
+                    }
+                    // First node in row
+                    if last_node != node && last_node.kind() != "class" {
+                        state.print(" ");
+                    }
+                }
                 format_node(state, child)?;
             }
         }
+        last_node = child;
     }
     Ok(())
 }
