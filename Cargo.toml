@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [
+    "app",
+    "lib",
+]
+
+[profile.release]
+lto = true
+panic = 'abort'
+
