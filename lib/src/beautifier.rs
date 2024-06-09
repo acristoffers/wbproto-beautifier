@@ -130,6 +130,9 @@ fn format_node(state: &mut State, node: Node) -> Result<()> {
 fn format_comment(state: &mut State, node: Node) -> Result<()> {
     let text = node.utf8_text(state.code)?;
     let line = text.strip_prefix('#').unwrap_or(text).trim();
+    if state.col == 0 {
+        state.indent();
+    }
     state.print("#");
     if !line.starts_with("VRML") {
         state.print(" ");
@@ -354,6 +357,7 @@ fn format_vector(state: &mut State, node: Node) -> Result<()> {
     let mut cursor = node.walk();
     let mut first = true;
     let mut supress_space = false;
+    let mut last_node = "none";
     for child in node.children(&mut cursor) {
         match child.kind() {
             "[" => {
@@ -389,13 +393,14 @@ fn format_vector(state: &mut State, node: Node) -> Result<()> {
                 if !first && !supress_space {
                     state.print(" ");
                 }
-                first = false;
-                supress_space = child.kind() == "class";
-                format_node(state, child)?;
-                if child.kind() == "class" {
+                if last_node == "class" {
                     state.println("");
                     state.indent();
                 }
+                first = false;
+                supress_space = child.kind() == "class" || child.kind() == "comment";
+                last_node = child.kind();
+                format_node(state, child)?;
             }
         }
     }
