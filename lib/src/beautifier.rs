@@ -19,12 +19,13 @@ struct State<'a> {
     row: usize,
     level: usize,
     extra_indentation: usize,
+    num_spaces: usize,
 }
 
 impl State<'_> {
     fn indent(&mut self) {
         for _ in 0..self.level {
-            self.print("    ");
+            self.print(" ".repeat(self.num_spaces).as_str());
         }
         for _ in 0..self.extra_indentation {
             self.print(" ");
@@ -96,6 +97,7 @@ pub fn beautify(code: &str, arguments: &mut Arguments) -> Result<String> {
         level: 0,
         extra_indentation: 0,
         formatted: String::with_capacity(code.len() * 2),
+        num_spaces: 4,
     };
 
     format_document(&mut state, root)?;
@@ -181,7 +183,7 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
                 }
                 state.indent();
                 last_line = state.row;
-                let mut at = state.level * 4 + sizes.0;
+                let mut at = state.level * state.num_spaces + sizes.0;
                 let mut ccursor = node.walk();
                 let fields: Vec<Node> = child.children(&mut ccursor).collect();
                 format_node(
@@ -221,7 +223,7 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
                 if state.col == 0 {
                     state.indent();
                 } else {
-                    let at = state.level * 4 + sizes.0 + sizes.1 + sizes.2 + sizes.3;
+                    let at = state.level * state.num_spaces + sizes.0 + sizes.1 + sizes.2 + sizes.3;
                     state.print(" ".repeat(at.saturating_sub(state.col)).as_str());
                 }
                 format_comment(state, child)?;
@@ -289,7 +291,7 @@ fn field_sizes(state: &mut State, fields: Vec<Node>) -> (usize, usize, usize, us
         let text_value = state.formatted.clone();
         state.formatted.clear();
 
-        let padding = 4;
+        let padding = state.num_spaces;
         kind_size = std::cmp::max(kind_size, text_kind.len() + padding);
         type_size = std::cmp::max(type_size, text_type.len() + padding);
         name_size = std::cmp::max(name_size, text_name.len() + padding);
