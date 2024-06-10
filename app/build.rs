@@ -12,11 +12,10 @@ use std::path::{Path, PathBuf};
 include!("../lib/src/args.rs");
 
 fn get_output_path() -> PathBuf {
-    //<root or manifest path>/target/<profile>/
     let out_dir = env::var("OUT_DIR").unwrap();
     let build_type = env::var("PROFILE").unwrap();
-    let target = out_dir.split_at(out_dir.find(("target/".to_string() + &build_type).as_str()).unwrap()).0;
-    Path::new(&target).join("target").join(build_type)
+    let target = out_dir.split_at(out_dir.find(("/".to_string() + &build_type).as_str()).unwrap()).0;
+    Path::new(&target).join(build_type)
 }
 
 fn main() -> Result<(), Error> {
