@@ -35,7 +35,7 @@
           default = wbproto-beautifier;
         };
         devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ rustc cargo ];
+          nativeBuildInputs = with pkgs; [ rustc cargo busybox clang-tools ];
           inherit buildInputs;
         };
       }

@@ -119,7 +119,7 @@ fn format_document(state: &mut State, node: Node) -> Result<()> {
 
 fn format_node(state: &mut State, node: Node) -> Result<()> {
     match node.kind() {
-        "class" => format_class(state, node),
+        "node" => format_node_def(state, node),
         "comment" => format_comment(state, node),
         "extern" => format_extern(state, node),
         "property" => format_property(state, node),
@@ -132,10 +132,18 @@ fn format_node(state: &mut State, node: Node) -> Result<()> {
 
 fn format_comment(state: &mut State, node: Node) -> Result<()> {
     let text = node.utf8_text(state.code)?;
-    let line = text.strip_prefix('#').unwrap_or(text).trim();
-    state.print("#");
-    if !line.starts_with("VRML") {
-        state.print(" ");
+    let mut stripped = false;
+    let line = if text.trim().starts_with("##") {
+        text.trim()
+    } else {
+        stripped = true;
+        text.strip_prefix('#').unwrap_or(text).trim()
+    };
+    if stripped {
+        state.print("#");
+        if !line.starts_with("VRML") {
+            state.print(" ");
+        }
     }
     state.print(line);
     Ok(())
@@ -143,10 +151,14 @@ fn format_comment(state: &mut State, node: Node) -> Result<()> {
 
 fn format_extern(state: &mut State, node: Node) -> Result<()> {
     let mut cursor = node.walk();
-    let children: Vec<Node> = node.named_children(&mut cursor).collect();
-    let text = children.first().err_at_loc(&node)?.utf8_text(state.code)?;
-    state.print("EXTERNPROTO ");
-    state.print(text);
+    let children: Vec<Node> = node.children(&mut cursor).collect();
+    for (i, child) in children.iter().enumerate() {
+        let text = child.utf8_text(state.code)?;
+        if i != 0 {
+            state.print(" ");
+        }
+        state.print(text);
+    }
     Ok(())
 }
 
@@ -232,7 +244,7 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
                 ok = true;
                 continue;
             }
-            ("class", true) => format_class(state, child)?,
+            ("node", true) => format_node_def(state, child)?,
             ("comment", true) => format_comment(state, child)?,
             ("javascript", true) => format_node(state, child)?,
             (_, _) => continue,
@@ -291,9 +303,31 @@ fn field_sizes(state: &mut State, fields: Vec<Node>) -> (usize, usize, usize, us
     (kind_size, type_size, name_size, value_size)
 }
 
-fn format_class(state: &mut State, node: Node) -> Result<()> {
-    let identifier = node.child(0).err_at_loc(&node)?.utf8_text(state.code)?;
-    state.print(identifier);
+fn format_node_def(state: &mut State, node: Node) -> Result<()> {
+    let oneliner = node.range().start_point.row == node.range().end_point.row;
+
+    let maybe_def = node.child(0).err_at_loc(&node)?;
+    if maybe_def.kind() == "DEF" {
+        state.print("DEF ");
+        let def_identifier = node
+            .named_child(0)
+            .err_at_loc(&node)?
+            .utf8_text(state.code)?;
+        state.print(def_identifier);
+        state.print(" ");
+        let identifier = node
+            .named_child(1)
+            .err_at_loc(&node)?
+            .utf8_text(state.code)?;
+        state.print(identifier);
+    } else {
+        let identifier = node
+            .named_child(0)
+            .err_at_loc(&node)?
+            .utf8_text(state.code)?;
+        state.print(identifier);
+    }
+
     state.print(" {");
 
     let mut ok = false;
@@ -306,15 +340,21 @@ fn format_class(state: &mut State, node: Node) -> Result<()> {
             ("{", false) => ok = true,
             ("}", true) => ok = false,
             ("comment", true) => {
-                if last_row != child.range().start_point.row {
+                if !oneliner && last_row != child.range().start_point.row {
                     state.println("");
                     state.indent();
+                } else if last_row == child.range().start_point.row {
+                    state.print(" ");
                 }
                 format_comment(state, child)?;
             }
             (_, true) => {
-                state.println("");
-                state.indent();
+                if !oneliner {
+                    state.println("");
+                    state.indent();
+                } else {
+                    state.print(" ");
+                }
                 format_node(state, child)?;
             }
             (_, false) => continue,
@@ -323,8 +363,12 @@ fn format_class(state: &mut State, node: Node) -> Result<()> {
     }
     state.level -= 1;
 
-    state.println("");
-    state.indent();
+    if oneliner {
+        state.print(" ");
+    } else {
+        state.println("");
+        state.indent();
+    }
     state.print("}");
     Ok(())
 }
@@ -343,30 +387,24 @@ fn format_property(state: &mut State, node: Node) -> Result<()> {
 }
 
 fn format_vector(state: &mut State, node: Node) -> Result<()> {
-    let mut oneliner = node.range().start_point.row == node.range().end_point.row;
+    let oneliner = node.range().start_point.row == node.range().end_point.row;
     let mut cursor = node.walk();
-    let contains_class = node.children(&mut cursor).any(|n| n.kind() == "class");
-    if contains_class {
-        oneliner = false;
-    }
     let mut last_node = node;
+    let mut brackets = false;
     for child in node.children(&mut cursor) {
         match child.kind() {
             "[" => {
-                if oneliner {
-                    state.print("[");
-                } else {
-                    state.print("[");
+                state.print("[");
+                if !oneliner {
                     state.level += 1;
-                    state.println("");
-                    state.indent();
                 }
                 last_node = node;
+                brackets = true;
                 continue;
             }
             "]" => {
                 if oneliner {
-                    state.print("]");
+                    state.print(" ]");
                 } else {
                     state.level -= 1;
                     state.println("");
@@ -384,31 +422,22 @@ fn format_vector(state: &mut State, node: Node) -> Result<()> {
                 }
             }
             "comment" => {
-                if last_node != node
-                    && (last_node.kind() == "comment"
-                        || last_node.range().end_point.row != child.range().start_point.row)
-                {
+                let same_line = last_node.range().end_point.row == child.range().start_point.row;
+                if !same_line {
                     state.println("");
                     state.indent();
                 }
-                state.print(" ");
+                if same_line {
+                    state.print(" ");
+                }
                 format_comment(state, child)?;
             }
             _ => {
-                if oneliner {
-                    // First node in row
-                    if last_node != node {
-                        state.print(" ");
-                    }
-                } else {
-                    if last_node.kind() == "class" {
-                        state.println("");
-                        state.indent();
-                    }
-                    // First node in row
-                    if last_node != node && last_node.kind() != "class" {
-                        state.print(" ");
-                    }
+                if oneliner && (brackets || last_node != node) {
+                    state.print(" ");
+                } else if !oneliner {
+                    state.println("");
+                    state.indent();
                 }
                 format_node(state, child)?;
             }

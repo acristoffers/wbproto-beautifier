@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
-clap = { version = "4.5.6", features = ["derive", "env"] }
+clap = { version = "4.5.7", features = ["derive", "env"] }
 tree-sitter = ">=0.22.5"
 tree-sitter-wbproto = { git = "https://github.com/acristoffers/tree-sitter-wbproto" }
 
