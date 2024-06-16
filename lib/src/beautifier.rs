@@ -125,8 +125,14 @@ fn format_document(state: &mut State, node: Node) -> Result<()> {
                 format_extern(state, child)?;
                 state.println("");
             }
-            "proto" => format_proto(state, child)?,
-            _ => format_node(state, child)?,
+            "proto" => {
+                state.println("");
+                format_proto(state, child)?;
+            }
+            _ => {
+                state.println("");
+                format_node(state, child)?;
+            }
         };
         last_node = child;
     }
@@ -187,7 +193,6 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
         .collect();
     let sizes = field_sizes(state, fields);
 
-    state.println("");
     state.print("PROTO ");
     state.print(name.utf8_text(state.code)?);
     state.print(" [");
@@ -322,26 +327,38 @@ fn field_sizes(state: &mut State, fields: Vec<Node>) -> (usize, usize, usize, us
 fn format_node_def(state: &mut State, node: Node) -> Result<()> {
     let oneliner = node.range().start_point.row == node.range().end_point.row;
 
-    let maybe_def = node.child(0).err_at_loc(&node)?;
-    if maybe_def.kind() == "DEF" {
-        state.print("DEF ");
-        let def_identifier = node
-            .named_child(0)
-            .err_at_loc(&node)?
-            .utf8_text(state.code)?;
-        state.print(def_identifier);
-        state.print(" ");
-        let identifier = node
-            .named_child(1)
-            .err_at_loc(&node)?
-            .utf8_text(state.code)?;
-        state.print(identifier);
-    } else {
-        let identifier = node
-            .named_child(0)
-            .err_at_loc(&node)?
-            .utf8_text(state.code)?;
-        state.print(identifier);
+    let maybe_def_or_use = node.child(0).err_at_loc(&node)?;
+    match maybe_def_or_use.kind() {
+        "DEF" => {
+            state.print("DEF ");
+            let def_identifier = node
+                .named_child(0)
+                .err_at_loc(&node)?
+                .utf8_text(state.code)?;
+            state.print(def_identifier);
+            state.print(" ");
+            let identifier = node
+                .named_child(1)
+                .err_at_loc(&node)?
+                .utf8_text(state.code)?;
+            state.print(identifier);
+        }
+        "USE" => {
+            let identifier = node
+                .named_child(0)
+                .err_at_loc(&node)?
+                .utf8_text(state.code)?;
+            state.print("USE ");
+            state.print(identifier);
+            return Ok(());
+        }
+        _ => {
+            let identifier = node
+                .named_child(0)
+                .err_at_loc(&node)?
+                .utf8_text(state.code)?;
+            state.print(identifier);
+        }
     }
 
     state.print(" {");
