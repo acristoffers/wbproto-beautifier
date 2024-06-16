@@ -502,7 +502,6 @@ fn format_javascript(state: &mut State, node: Node) -> Result<()> {
         state.print(formatted_code);
         state.print(" >%");
     } else {
-        state.indent();
         state.println(opener);
         state.level += 1;
         for line in formatted_code.lines() {
