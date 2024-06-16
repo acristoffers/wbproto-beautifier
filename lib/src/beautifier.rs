@@ -101,18 +101,34 @@ pub fn beautify(code: &str, arguments: &mut Arguments) -> Result<String> {
     };
 
     format_document(&mut state, root)?;
+    state.println("");
     Ok(state.formatted)
 }
 
 fn format_document(state: &mut State, node: Node) -> Result<()> {
     let mut cursor = node.walk();
     let children: Vec<Node> = node.children(&mut cursor).collect();
+    let mut last_node = node;
     for child in children {
-        if format_node(state, child).is_err() {
-            eprintln!("Failed to format node.");
-            break;
-        }
-        state.println("");
+        match child.kind() {
+            "comment" => {
+                if last_node.end_position().row == child.start_position().row {
+                    state.print(" ");
+                }
+                format_comment(state, child)?;
+                state.println("");
+            }
+            "extern" => {
+                if last_node.kind() == "comment" {
+                    state.println("");
+                }
+                format_extern(state, child)?;
+                state.println("");
+            }
+            "proto" => format_proto(state, child)?,
+            _ => format_node(state, child)?,
+        };
+        last_node = child;
     }
     Ok(())
 }
@@ -251,7 +267,7 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
         }
         state.println("");
     }
-    state.println("}");
+    state.print("}");
     Ok(())
 }
 
@@ -495,7 +511,7 @@ fn format_javascript(state: &mut State, node: Node) -> Result<()> {
         }
         state.level -= 1;
         state.indent();
-        state.println(">%");
+        state.print(">%");
     }
     Ok(())
 }

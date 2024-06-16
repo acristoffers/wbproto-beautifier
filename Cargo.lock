@@ -286,7 +286,7 @@ dependencies = [
 [[package]]
 name = "tree-sitter-wbproto"
 version = "0.0.1"
-source = "git+https://github.com/acristoffers/tree-sitter-wbproto#41cffb006f25d12b6ed92e60d0970f9bf7c59bfa"
+source = "git+https://github.com/acristoffers/tree-sitter-wbproto#51dc25b6fd1e009a236699ce44f6df60b17bc2b7"
 dependencies = [
  "cc",
  "tree-sitter",
