@@ -97,7 +97,7 @@ pub fn beautify(code: &str, arguments: &mut Arguments) -> Result<String> {
         level: 0,
         extra_indentation: 0,
         formatted: String::with_capacity(code.len() * 2),
-        num_spaces: 4,
+        num_spaces: 2,
     };
 
     format_document(&mut state, root)?;
