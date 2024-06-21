@@ -114,12 +114,19 @@ fn format_document(state: &mut State, node: Node) -> Result<()> {
             "comment" => {
                 if last_node.end_position().row == child.start_position().row {
                     state.print(" ");
+                } else if last_node != node
+                    && child.start_position().row - last_node.end_position().row > 1
+                {
+                    state.println("");
                 }
                 format_comment(state, child)?;
                 state.println("");
             }
             "extern" => {
-                if last_node.kind() == "comment" {
+                if last_node != node
+                    && (last_node.kind() == "comment"
+                        || child.start_position().row - last_node.end_position().row > 1)
+                {
                     state.println("");
                 }
                 format_extern(state, child)?;
