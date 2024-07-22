@@ -86,7 +86,10 @@ pub fn beautify(code: &str, arguments: &mut Arguments) -> Result<String> {
 
     let root = tree.root_node();
     if root.has_error() {
-        return Err(anyhow!("Parsed file contain errors."));
+        let error_node = find_first_error_node(root)
+            .ok_or_else(|| anyhow!("An error occurred, but no ERROR node was found."))?;
+        let line = error_node.start_position().row + 1;
+        return Err(anyhow!("Parsed file contain errors (at line {line})."));
     }
 
     let mut state = State {
@@ -103,6 +106,18 @@ pub fn beautify(code: &str, arguments: &mut Arguments) -> Result<String> {
     format_document(&mut state, root)?;
     state.println("");
     Ok(state.formatted)
+}
+
+fn find_first_error_node(node: tree_sitter::Node) -> Option<tree_sitter::Node> {
+    if node.is_error() {
+        return Some(node.clone());
+    }
+    for child in node.children(&mut node.walk()) {
+        if let Some(error_node) = find_first_error_node(child.clone()) {
+            return Some(error_node);
+        }
+    }
+    None
 }
 
 fn format_document(state: &mut State, node: Node) -> Result<()> {
