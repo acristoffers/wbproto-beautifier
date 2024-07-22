@@ -7,8 +7,8 @@
 use anyhow::Result;
 use colored::*;
 
-use wbproto_beautifier::{Arguments, Parser};
 use wbproto_beautifier::beautify;
+use wbproto_beautifier::{Arguments, Parser};
 
 fn main() {
     let mut options = Arguments::parse();
@@ -19,9 +19,6 @@ fn main() {
         options.inplace |= options.files.len() > 1;
         let files = options.files.clone();
         for file in files {
-            if options.inplace {
-                print!("Formatting file {}: ", file);
-            }
             let r = beautify_file(Some(file), &mut options);
             if let (false, Err(_)) = (options.inplace, &r) {
                 r.unwrap()
@@ -40,7 +37,8 @@ fn beautify_file(file: Option<String>, options: &mut Arguments) -> Result<()> {
         read_to_string(&mut std::io::stdin(), None)?.0 + "\n"
     };
     let result = beautify(code.as_str(), options)?;
-    if options.inplace {
+    let result_extra_newline = result.clone() + "\n";
+    if options.inplace && result_extra_newline != code {
         print!("{}", "file formatted ".green());
         match std::fs::write(file.unwrap().as_str(), result.as_bytes()) {
             Ok(_) => println!("{}", "and overwritten.".green()),
