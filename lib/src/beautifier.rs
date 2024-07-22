@@ -154,7 +154,8 @@ fn format_node(state: &mut State, node: Node) -> Result<()> {
         "property" => format_property(state, node),
         "proto" => format_proto(state, node),
         "vector" => format_vector(state, node),
-        "javascript" => format_javascript(state, node),
+        "javascript_block" => format_javascript(state, node),
+        "javascript_expression" => format_javascript(state, node),
         _ => state.print_node(node),
     }
 }
