@@ -290,7 +290,7 @@ fn format_proto(state: &mut State, node: Node) -> Result<()> {
             }
             ("node", true) => format_node_def(state, child)?,
             ("comment", true) => format_comment(state, child)?,
-            ("javascript", true) => format_node(state, child)?,
+            ("javascript_block", true) => format_node(state, child)?,
             (_, _) => continue,
         }
         state.println("");
