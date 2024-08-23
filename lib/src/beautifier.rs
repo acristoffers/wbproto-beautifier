@@ -470,12 +470,6 @@ fn format_vector(state: &mut State, node: Node) -> Result<()> {
             }
             "," => {
                 state.print(",");
-                if !oneliner {
-                    last_node = node;
-                    state.println("");
-                    state.indent();
-                    continue;
-                }
             }
             "comment" => {
                 let same_line = last_node.range().end_point.row == child.range().start_point.row;
