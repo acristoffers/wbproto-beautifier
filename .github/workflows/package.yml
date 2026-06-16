@@ -1,0 +1,117 @@
+name: Package
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deb:
+    name: Build .deb packages (Ubuntu ${{ matrix.ubuntu }})
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+    strategy:
+      matrix:
+        ubuntu: ["26.04", "26.04-arm"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev libadwaita-1-dev \
+            libavcodec-dev libavformat-dev libavutil-dev \
+            libswscale-dev libswresample-dev \
+            libavfilter-dev libavdevice-dev \
+            libclang-dev cmake pkg-config librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ubuntu-${{ matrix.ubuntu }}
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package (deb)
+        run: cargo deb -p wbproto-beautifier --no-build
+
+      - name: Upload deb artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-packages-ubuntu-${{ matrix.ubuntu }}
+          path: target/debian/*.deb
+
+  rpm:
+    name: Build .rpm packages (Fedora ${{ matrix.fedora }} - Ubuntu ${{ matrix.ubuntu }})
+    runs-on: ubuntu-${{ matrix.ubuntu }}
+    strategy:
+      matrix:
+        ubuntu: ["26.04", "26.04-arm"]
+        fedora: [43, 44]
+    container:
+      image: fedora:${{ matrix.fedora }}
+    steps:
+      - name: Install system dependencies
+        run: |
+          dnf install -y \
+            gcc gcc-c++ make cmake pkgconf-pkg-config git \
+            gtk4-devel libadwaita-devel \
+            ffmpeg-free-devel \
+            clang-devel librsvg2-devel glib2-devel
+
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fedora-${{ matrix.fedora }}
+
+      - name: Install cargo-generate-rpm
+        run: cargo install cargo-generate-rpm
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Package (rpm)
+        run: cargo generate-rpm -p app --set-metadata "release = \"1.fc${{ matrix.fedora }}\""
+
+      - name: Upload rpm artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: rpm-packages-fedora-${{ matrix.fedora }}-ubuntu-${{ matrix.ubuntu }}
+          path: target/generate-rpm/*.rpm
+
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [deb, rpm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: |
+            deb-packages-*/*.deb
+            rpm-packages-*/*.rpm

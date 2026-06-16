@@ -2,6 +2,9 @@
 name = "wbproto-beautifier"
 version = "1.0.0"
 edition = "2021"
+license = "MPL-2.0"
+authors = ["Álan Crístoffer <alan@esousa.me>"]
+description = "A beautifier for Webots Proto files"
 
 [dependencies]
 wbproto_beautifier = { path = "../lib" }
@@ -20,3 +23,24 @@ fs_extra = "1.3.0"
 [[bin]]
 name = "wbproto-beautifier"
 path = "src/main.rs"
+
+[package.metadata.deb]
+section = "utils"
+depends = "$auto"
+extended-description = "A beautifier for ledger files"
+assets = [
+    ["target/release/wbproto-beautifier", "usr/bin/", "755"],
+    ["target/release/share/man/man1/wbproto-beautifier.1", "usr/share/man/man1/", "644"],
+    ["target/release/share/bash/completions/wbproto-beautifier.bash", "usr/share/bash-completion/completions/wbproto-beautifier", "644"],
+    ["target/release/share/fish/completions/wbproto-beautifier.fish", "usr/share/fish/vendor_completions.d/", "644"],
+    ["target/release/share/zsh/completions/_wbproto-beautifier", "usr/share/zsh/vendor-completions/", "644"],
+]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/wbproto-beautifier", dest = "/usr/bin/wbproto-beautifier", mode = "755" },
+    { source = "target/release/share/man/man1/wbproto-beautifier.1", dest = "/usr/share/man/man1/wbproto-beautifier.1", mode = "644", doc = true },
+    { source = "target/release/share/bash/completions/wbproto-beautifier.bash", dest = "/usr/share/bash-completion/completions/wbproto-beautifier", mode = "644" },
+    { source = "target/release/share/fish/completions/wbproto-beautifier.fish", dest = "/usr/share/fish/vendor_completions.d/wbproto-beautifier.fish", mode = "644" },
+    { source = "target/release/share/zsh/completions/_wbproto-beautifier", dest = "/usr/share/zsh/site-functions/_wbproto-beautifier", mode = "644" },
+]
